@@ -1,2 +1,156 @@
-# Running-room-rajkot
-RRMS Integrated online dashboard
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>WR Rajkot Division – Smart AC Energy Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/mqtt/dist/mqtt.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #f5f7fa;
+    margin: 0;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    background: #004b8d;
+    color: white;
+    padding: 10px 20px;
+  }
+  header img {
+    height: 50px;
+    margin-right: 15px;
+  }
+  #connectionStatus {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-weight: bold;
+    background-color: red;
+    color: white;
+  }
+  main { padding: 20px; }
+  .room {
+    background: white;
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 10px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+  canvas {
+    margin-top: 20px;
+    background: white;
+    border-radius: 10px;
+    padding: 10px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+  footer {
+    text-align: center;
+    padding: 12px;
+    background: #004b8d;
+    color: white;
+  }
+</style>
+</head>
+<body>
+<header>
+  <img src="https://upload.wikimedia.org/wikipedia/commons/0/09/Indian_Railways_Logo.svg" alt="Logo" />
+  <div>
+    <h1>WR Rajkot Division – Smart AC Energy Dashboard</h1>
+    <p>Live Room Status & Power Consumption (Powered by HiveMQ Cloud)</p>
+  </div>
+</header>
+<div id="connectionStatus">Offline</div>
+<main>
+  <div id="rooms"></div>
+  <canvas id="energyChart" height="400"></canvas>
+</main>
+<footer>Electrical Department, WR Rajkot Division</footer>
+
+<script>
+const roomsData = [
+  {id: 1, name: "New Building - Room 13", occupied: false, relay: false, kwh: 0},
+  {id: 2, name: "New Building - Room 14", occupied: false, relay: false, kwh: 0},
+  {id: 3, name: "Admin Block - Room 5", occupied: false, relay: false, kwh: 0},
+  {id: 4, name: "C&W Section - Room 2", occupied: false, relay: false, kwh: 0}
+];
+
+const brokerUrl = "wss://adf74eebfbed4f00b701c7e7d20d5ed8.s1.eu.hivemq.cloud:8884/mqtt";
+const options = {
+  username: "Srdeeprjt",
+  password: "Srdee1234",
+  reconnectPeriod: 2000
+};
+const client = mqtt.connect(brokerUrl, options);
+const statusDiv = document.getElementById("connectionStatus");
+
+client.on("connect", () => {
+  statusDiv.textContent = "Online";
+  statusDiv.style.backgroundColor = "green";
+  client.subscribe("WRRajkot/Rooms/#");
+});
+client.on("offline", () => {
+  statusDiv.textContent = "Offline";
+  statusDiv.style.backgroundColor = "red";
+});
+
+client.on("message", (topic, message) => {
+  try {
+    const data = JSON.parse(message.toString());
+    const room = roomsData.find(r => r.id === data.id);
+    if (room) {
+      room.occupied = data.occupied;
+      room.relay = data.relay;
+      room.kwh = data.kwh;
+      updateRooms();
+      updateChart();
+    }
+  } catch (e) { console.log(e); }
+});
+
+function updateRooms() {
+  const container = document.getElementById("rooms");
+  container.innerHTML = "";
+  roomsData.forEach(r => {
+    const div = document.createElement("div");
+    div.className = "room";
+    div.innerHTML = `
+      <h3>${r.name}</h3>
+      <p><strong>Occupancy:</strong> ${r.occupied ? "Occupied" : "Vacant"}</p>
+      <p><strong>Relay:</strong> ${r.relay ? "ON" : "OFF"}</p>
+      <p><strong>Energy:</strong> ${r.kwh.toFixed(2)} kWh</p>
+    `;
+    container.appendChild(div);
+  });
+}
+
+const ctx = document.getElementById("energyChart").getContext("2d");
+const chart = new Chart(ctx, {
+  type: "bar",
+  data: {
+    labels: roomsData.map(r => r.name),
+    datasets: [{
+      label: "Energy Consumption (kWh)",
+      data: roomsData.map(r => r.kwh),
+      backgroundColor: "rgba(0,75,141,0.7)"
+    }]
+  },
+  options: {
+    indexAxis: "y",
+    scales: { x: { beginAtZero: true } }
+  }
+});
+
+function updateChart() {
+  chart.data.datasets[0].data = roomsData.map(r => r.kwh);
+  chart.update();
+}
+
+updateRooms();
+</script>
+</body>
+</html>
