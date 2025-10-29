@@ -1,0 +1,96 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Rajkot AC Dashboard</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body{font-family:Arial,Helvetica,sans-serif;background:#f4f6f8;margin:16px;}
+    .card{background:white;border-radius:8px;padding:12px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);}
+    .row{display:flex;gap:12px;flex-wrap:wrap;}
+    .room{flex:1;min-width:220px;padding:10px;border-radius:6px;border:1px solid #eee;background:#fff;}
+    .occ{font-weight:bold;}
+    canvas{max-width:100%;}
+  </style>
+</head>
+<body>
+  <h2>Rajkot Division — AC Rooms</h2>
+  <div id="status" class="card">Connecting to MQTT...</div>
+  <div id="rooms" class="row"></div>
+  <div class="card"><canvas id="chart"></canvas></div>
+
+<script>
+const MQTT_HOST = "adf74eebfbed4f00b701c7e7d20d5ed8.s1.eu.hivemq.cloud";
+const MQTT_PORT = 8884;
+const MQTT_USER = "Srdeeprjt";
+const MQTT_PASS = "Srdee1234";
+const MQTT_TOPIC = "rajkot/ac/status";
+
+// connect using WebSocket secure to HiveMQ Cloud (path /mqtt)
+const client = mqtt.connect({
+  host: MQTT_HOST,
+  port: MQTT_PORT,
+  protocol: 'wss',
+  username: MQTT_USER,
+  password: MQTT_PASS,
+  path: '/mqtt'
+});
+
+const statusEl = document.getElementById('status');
+const roomsEl = document.getElementById('rooms');
+const ctx = document.getElementById('chart').getContext('2d');
+
+let chart = new Chart(ctx, {
+  type: 'bar',
+  data: { labels: [], datasets: [{ label: 'Energy (kWh)', data: [], backgroundColor: [] }] },
+  options: { indexAxis: 'y', scales: { x: { beginAtZero:true } } }
+});
+
+client.on('connect', () => {
+  statusEl.innerText = 'Connected to MQTT broker';
+  client.subscribe(MQTT_TOPIC);
+});
+
+client.on('error', (err) => {
+  statusEl.innerText = 'MQTT error: ' + err;
+  console.error(err);
+});
+
+client.on('message', (topic, message) => {
+  try {
+    const payload = JSON.parse(message.toString());
+    roomsEl.innerHTML = '';
+    const labels = [];
+    const values = [];
+    const colors = [];
+    payload.rooms.forEach((r, i) => {
+      const div = document.createElement('div');
+      div.className = 'room card';
+      const name = r.name && r.name !== '-' ? r.name : ('Room ' + (i+1));
+      const occ = r.occupancy == 1 ? 'Occupied' : 'Free';
+      const occColor = r.occupancy == 1 ? 'green' : '#666';
+      div.innerHTML = `<div><strong>${name}</strong> (${r.id})</div>
+                       <div class="occ" style="color:${occColor}">${occ}</div>
+                       <div>Relay: ${r.relay? 'ON' : 'OFF'}</div>
+                       <div>Mode: ${r.mode}</div>
+                       <div><strong>${Number(r.energy).toFixed(3)} kWh</strong></div>`;
+      roomsEl.appendChild(div);
+      labels.push(name + ' (' + r.id + ')');
+      values.push(Number(r.energy));
+      colors.push(r.occupancy==1 ? '#28a745' : '#cccccc');
+    });
+
+    chart.data.labels = labels;
+    chart.data.datasets[0].data = values;
+    chart.data.datasets[0].backgroundColor = colors;
+    chart.update();
+  } catch(e) {
+    console.error('Invalid message', e);
+  }
+});
+</script>
+</body>
+</html>
